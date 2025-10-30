@@ -31,20 +31,23 @@ public class LoginActivity extends AppCompatActivity {
     private EditText editTextEmail, editTextPassword;
     private FirebaseAuth mAuth;
     private FirebaseFirestore db;
+    private String selectedRole = "Student"; // default role
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
         // Check if the user is logged in
 
+        // Initialize Firebase instances first
+        mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
+
         checkUserLoggedIn();
+
         AppCompatButton Loginbtn = findViewById(R.id.btnlogin);
         TextView signupbtn = findViewById(R.id.signUpBtn);
         editTextEmail = findViewById(R.id.editTextEmail);
         editTextPassword = findViewById(R.id.editTextPassword);
-
-        mAuth = FirebaseAuth.getInstance();
-        db = FirebaseFirestore.getInstance();
 
         Spinner spinnerRole = findViewById(R.id.spinnerRole);
 
@@ -56,29 +59,38 @@ public class LoginActivity extends AppCompatActivity {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerRole.setAdapter(adapter);
 
+        // Keep track of currently selected role; set login button listener once
         spinnerRole.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parentView, View selectedItemView, int position, long id) {
-
-                Loginbtn.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-
-                        String email = editTextEmail.getText().toString().trim();
-                        String password = editTextPassword.getText().toString().trim();
-                        String selectedRole = parentView.getItemAtPosition(position).toString();
-                        loginUser(selectedRole,email,password);
-
-
-                    }
-                });
-                // Navigate to the respective activity based on the selected role
-
+                selectedRole = parentView.getItemAtPosition(position).toString();
             }
 
             @Override
             public void onNothingSelected(AdapterView<?> parentView) {
-                // Do nothing here if needed
+                // keep default role
+            }
+        });
+
+        Loginbtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String email = editTextEmail.getText().toString().trim();
+                String password = editTextPassword.getText().toString().trim();
+
+                // Basic input validation
+                if (email.isEmpty()) {
+                    editTextEmail.setError("Email required");
+                    editTextEmail.requestFocus();
+                    return;
+                }
+                if (password.isEmpty()) {
+                    editTextPassword.setError("Password required");
+                    editTextPassword.requestFocus();
+                    return;
+                }
+
+                loginUser(selectedRole, email, password);
             }
         });
 
