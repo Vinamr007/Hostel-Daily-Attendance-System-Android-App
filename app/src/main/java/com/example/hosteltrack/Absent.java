@@ -52,15 +52,18 @@ public class Absent extends AppCompatActivity {
 
     FloatingActionButton fabAdd;
 
+    private ProgressBar progressBar;
+    
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_absent);
 
-        // Initialize Firestore
+        // Initialize Firestore and views
         db = FirebaseFirestore.getInstance();
         fabAdd = findViewById(R.id.fabAdd);
         TextView tvDayDate = findViewById(R.id.tvDayDate);
+        progressBar = findViewById(R.id.progressBar);
 
         // Initialize RecyclerView and adapter
         recyclerView = findViewById(R.id.recyclerViewAbsent);
@@ -142,29 +145,36 @@ public class Absent extends AppCompatActivity {
     private void sendSmsToAbsentStudents() {
         // Check permission again (in case it's not already checked/obtained)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.SEND_SMS) == PackageManager.PERMISSION_GRANTED) {
-            // Assuming getAbsentStudentNumbers returns a List<String> of phone numbers
-//            List<String> phoneNumbers = getAbsentStudentNumbers();
             List<String> phoneNumberslist = getAbsentStudentNumbers();
+            if (phoneNumberslist.isEmpty()) {
+                Toast.makeText(this, "No absent students to notify", Toast.LENGTH_SHORT).show();
+                return;
+            }
 
-// Convert the List to a Set to enforce uniqueness
+            // Convert to Set to remove duplicates
             Set<String> uniquePhoneNumbersSet = new HashSet<>(phoneNumberslist);
-
-// Convert the Set back to a List if needed
             List<String> phoneNumbers = new ArrayList<>(uniquePhoneNumbersSet);
 
             SmsManager smsManager = SmsManager.getDefault();
-            String message = "Mark Your Attendence , Else You Will be marked as absent today !";
+            String message = "Mark Your Attendance, Else You Will be marked as absent today!";
+
+            int successCount = 0;
+            int failCount = 0;
 
             for (String phoneNumber : phoneNumbers) {
                 try {
                     smsManager.sendTextMessage(phoneNumber, null, message, null, null);
+                    successCount++;
                 } catch (Exception e) {
-                    Log.e(TAG, "SMS send failed", e);
-                    // Handle exception
+                    Log.e(TAG, "SMS send failed to " + phoneNumber, e);
+                    failCount++;
                 }
             }
+
+            String resultMessage = String.format("SMS sent to %d students. Failed: %d", successCount, failCount);
+            Toast.makeText(this, resultMessage, Toast.LENGTH_SHORT).show();
         } else {
-            // Request permission if not granted
+            Toast.makeText(this, "SMS permission required to send notifications", Toast.LENGTH_LONG).show();
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.SEND_SMS}, PERMISSION_SEND_SMS);
         }
     }
@@ -181,6 +191,13 @@ public class Absent extends AppCompatActivity {
     }
 
     private void fetchAbsentStudentsDetails(List<String> absentStudentUUIDs) {
+        if (progressBar != null) progressBar.setVisibility(View.VISIBLE);
+        if (absentStudentUUIDs.isEmpty()) {
+            updateEmptyState(true);
+            if (progressBar != null) progressBar.setVisibility(View.GONE);
+            return;
+        }
+        
         for (String uuid : absentStudentUUIDs) {
             db.collection("students")
                     .document(uuid)
@@ -248,9 +265,38 @@ public class Absent extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_SEND_SMS) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Permission was granted
+                Toast.makeText(this, "SMS permission granted. You can now send notifications.", Toast.LENGTH_SHORT).show();
+                sendSmsToAbsentStudents(); // Retry sending SMS
             } else {
-                // Permission was denied
+                Toast.makeText(this, "SMS permission denied. Cannot send notifications.", Toast.LENGTH_LONG).show();
+                // Show dialog explaining why permission is needed
+                new AlertDialog.Builder(this)
+                    .setTitle("Permission Required")
+                    .setMessage("SMS permission is needed to send notifications to absent students. Please grant this permission in Settings.")
+                    .setPositiveButton("Open Settings", (dialog, which) -> {
+                        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                        Uri uri = Uri.fromParts("package", getPackageName(), null);
+                        intent.setData(uri);
+                        startActivity(intent);
+                    })
+                    .setNegativeButton("Cancel", null)
+                    .show();
+            }
+        }
+    }
+    
+    private void updateEmptyState(boolean isEmpty) {
+        if (isEmpty) {
+            TextView emptyView = findViewById(R.id.emptyView);
+            if (emptyView != null) {
+                emptyView.setVisibility(View.VISIBLE);
+                recyclerView.setVisibility(View.GONE);
+            }
+        } else {
+            TextView emptyView = findViewById(R.id.emptyView);
+            if (emptyView != null) {
+                emptyView.setVisibility(View.GONE);
+                recyclerView.setVisibility(View.VISIBLE);
             }
         }
     }
